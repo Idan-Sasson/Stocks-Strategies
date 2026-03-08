@@ -14,10 +14,30 @@ class TradingSim:
 
     def simulate_exit_after(self, ticker, entry, close_after):
         entry = self.get_next_trading_day(entry)
-        close = self.get_next_trading_day(entry + pd.Timedelta(days=close_after))
+        if isinstance(close_after, str):
+            close = self.get_next_trading_day(entry + pd.Timedelta(days=close_after))
+        else:
+            close = close_after
         buy_price = self.df['Close', ticker].loc[entry]
         sell_price = self.df['Close', ticker].loc[close]
         return float(((sell_price - buy_price) / buy_price))
+
+    def simulate_exit_rsi(self, ticker, entry, rsi_threshold):
+        close_prices = self.df['Close']  # 1. Isolate Close prices (returns a DataFrame with dates as index and tickers as columns)
+        delta = close_prices.diff()  # 2. Calculate daily price changes
+        
+        # 3. Separate the gains and losses
+        gains = delta.clip(lower=0)  
+        losses = -1 * delta.clip(upper=0)
+        
+        # 4. Calculate the moving averages of gains and losses
+        # Wilder's original RSI uses an alpha of 1/14. In pandas, com=window-1 achieves this.
+        window = 14
+        avg_gains = gains.ewm(com=window - 1, min_periods=window).mean()
+        avg_losses = losses.ewm(com=window - 1, min_periods=window).mean()
+        rs = avg_gains / avg_losses  # 5. Calculate Relative Strength (RS)
+        rsi = 100 - (100 / (1 + rs))  # 6. Calculate the RSI
+        return rsi
 
     def optimizer_exit_after(self, entry, tickers=None):
         optimize_df = self.df
